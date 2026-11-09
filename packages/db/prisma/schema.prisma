@@ -1,0 +1,369 @@
+// MobileFix Pro database schema.
+// Reconstructed for the verified working copy: only the models and fields the
+// current API/services use are included. Inventory, coupons, CMS, and audit
+// tables described in docs/ are intentionally deferred to later phases.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  TECHNICIAN
+  MANAGER
+  ADMIN
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum ActorType {
+  CUSTOMER
+  TECHNICIAN
+  MANAGER
+  ADMIN
+  SYSTEM
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum RepairStage {
+  DEVICE_RECEIVED
+  DIAGNOSING
+  WAITING_PARTS
+  REPAIRING
+  QUALITY_CHECK
+  COMPLETED
+  READY_FOR_PICKUP
+  DELIVERED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum ServiceCategory {
+  SCREEN
+  BATTERY
+  CHARGING_PORT
+  CAMERA
+  SPEAKER
+  MOTHERBOARD
+  WATER_DAMAGE
+  SOFTWARE
+  UNLOCKING
+  DATA_RECOVERY
+  ACCESSORY
+  OTHER
+}
+
+enum PriceModel {
+  FIXED
+  FROM
+  RANGE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  name             String
+  phone            String?
+  role             UserRole  @default(CUSTOMER)
+  isActive         Boolean   @default(true)
+  emailVerifiedAt  DateTime?
+  passwordChangedAt DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  customer      Customer?
+  technician    Technician?
+  refreshTokens RefreshToken[]
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+  reviews  Review[]
+}
+
+model Technician {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  branchId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch   Branch    @relation(fields: [branchId], references: [id])
+  bookings Booking[]
+
+  @@index([branchId])
+}
+
+model RefreshToken {
+  id                String    @id @default(cuid())
+  userId            String
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+  ip                String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Otp {
+  id         String    @id @default(cuid())
+  email      String
+  purpose    OtpPurpose
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose])
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  address       String
+  city          String
+  state         String
+  postalCode    String
+  phone         String
+  whatsapp      String?
+  email         String
+  mapsUrl       String?
+  timezone      String   @default("Asia/Kathmandu")
+  businessHours Json
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  technicians Technician[]
+  bookings    Booking[]
+}
+
+model Brand {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models        DeviceModel[]
+  servicePrices ServicePrice[]
+  bookings      Booking[]
+}
+
+model DeviceModel {
+  id          String   @id @default(cuid())
+  brandId     String
+  name        String
+  slug        String
+  releaseYear Int?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brand         Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  servicePrices ServicePrice[]
+  bookings      Booking[]
+
+  @@unique([brandId, slug])
+  @@index([brandId])
+}
+
+model Service {
+  id               String          @id @default(cuid())
+  name             String
+  slug             String          @unique
+  shortDescription String?
+  description      String
+  category         ServiceCategory
+  icon             String?
+  imageUrl         String?
+  startingPrice    Int
+  estTimeMin       Int
+  warrantyDays     Int             @default(0)
+  priceModel       PriceModel      @default(FIXED)
+  isActive         Boolean         @default(true)
+  sortOrder        Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  prices          ServicePrice[]
+  bookingServices BookingService[]
+}
+
+model ServicePrice {
+  id         String   @id @default(cuid())
+  serviceId  String
+  brandId    String
+  modelId    String?
+  basePrice  Int
+  partsCost  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  service Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  brand   Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  model   DeviceModel? @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, brandId, modelId])
+  @@index([brandId, modelId])
+}
+
+model Booking {
+  id                 String        @id @default(cuid())
+  bookingRef         String        @unique
+  idempotencyKey     String?       @unique
+  branchId           String
+  customerId         String?
+  guestName          String?
+  guestEmail         String?
+  guestPhone         String?
+  brandId            String
+  modelId            String
+  problemDescription String?
+  images             String[]      @default([])
+  deviceImei         String?
+  deviceSerial       String?
+  devicePassword     String?
+  scheduledAt        DateTime
+  timeSlot           String?
+  estimatedCost      Int           @default(0)
+  depositAmount      Int           @default(0)
+  status             BookingStatus @default(PENDING)
+  repairStage        RepairStage?
+  paymentStatus      PaymentStatus @default(UNPAID)
+  isWalkIn           Boolean       @default(false)
+  notes              String?
+  technicianId       String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  branch     Branch           @relation(fields: [branchId], references: [id])
+  customer   Customer?        @relation(fields: [customerId], references: [id])
+  brand      Brand            @relation(fields: [brandId], references: [id])
+  model      DeviceModel      @relation(fields: [modelId], references: [id])
+  technician Technician?      @relation(fields: [technicianId], references: [id])
+  services   BookingService[]
+  events     BookingEvent[]
+  invoice    Invoice?
+  review     Review?
+
+  @@index([branchId, status])
+  @@index([branchId, scheduledAt])
+  @@index([customerId])
+  @@index([technicianId])
+}
+
+model BookingService {
+  id          String  @id @default(cuid())
+  bookingId   String
+  serviceId   String
+  quotedPrice Int
+  isPrimary   Boolean @default(false)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([bookingId])
+  @@index([serviceId])
+}
+
+model BookingEvent {
+  id         String    @id @default(cuid())
+  bookingId  String
+  actorType  ActorType
+  fromStatus String?
+  toStatus   String?
+  note       String?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  bookingId  String        @unique
+  invoiceNo  String        @unique
+  subtotal   Int           @default(0)
+  taxAmount  Int           @default(0)
+  discount   Int           @default(0)
+  total      Int           @default(0)
+  status     InvoiceStatus @default(DRAFT)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id         String       @id @default(cuid())
+  bookingId  String       @unique
+  customerId String?
+  rating     Int
+  comment    String?
+  status     ReviewStatus @default(PENDING)
+  adminReply String?
+  featured   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([status, featured])
+}

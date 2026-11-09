@@ -1,0 +1,23 @@
+# Local development database — `docker compose up -d`
+# Production uses Railway managed Postgres (see docs/deployment.md).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mobileshop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mobileshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - mobileshop-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mobileshop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mobileshop-pgdata:

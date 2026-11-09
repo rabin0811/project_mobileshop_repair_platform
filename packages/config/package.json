@@ -1,0 +1,20 @@
+{
+  "name": "@mobileshop/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "tsconfig.base.json"
+  ]
+}
